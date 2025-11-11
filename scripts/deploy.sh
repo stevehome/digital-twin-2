@@ -13,7 +13,14 @@ echo "📦 Building Lambda package..."
 
 # 2. Terraform workspace & apply
 cd terraform
-terraform init -input=false
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+AWS_REGION=${DEFAULT_AWS_REGION:-us-east-1}
+terraform init -input=false \
+  -backend-config="bucket=twin-terraform-state-${AWS_ACCOUNT_ID}" \
+  -backend-config="key=${ENVIRONMENT}/terraform.tfstate" \
+  -backend-config="region=${AWS_REGION}" \
+  -backend-config="dynamodb_table=twin-terraform-locks" \
+  -backend-config="encrypt=true"
 
 if ! terraform workspace list | grep -q "$ENVIRONMENT"; then
   terraform workspace new "$ENVIRONMENT"
@@ -53,4 +60,4 @@ echo "🌐 CloudFront URL : $(terraform -chdir=terraform output -raw cloudfront_
 if [ -n "$CUSTOM_URL" ]; then
   echo "🔗 Custom domain  : $CUSTOM_URL"
 fi
-echo "📡 API Gateway    : $API_URL"
+echo "📡 API Gateway    : $API_URL"`
