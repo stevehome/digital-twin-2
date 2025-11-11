@@ -62,6 +62,8 @@ jobs:
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           DEFAULT_AWS_REGION: ${{ secrets.DEFAULT_AWS_REGION }}
+          AWS_REGION: ${{ secrets.DEFAULT_AWS_REGION }}
+          AWS_DEFAULT_REGION: ${{ secrets.DEFAULT_AWS_REGION }}
           AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
         run: |
           chmod +x scripts/deploy.sh
