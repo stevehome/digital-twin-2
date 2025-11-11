@@ -60,4 +60,4 @@ echo "🌐 CloudFront URL : $(terraform -chdir=terraform output -raw cloudfront_
 if [ -n "$CUSTOM_URL" ]; then
   echo "🔗 Custom domain  : $CUSTOM_URL"
 fi
-echo "📡 API Gateway    : $API_URL"`
+echo "📡 API Gateway    : $API_URL"
