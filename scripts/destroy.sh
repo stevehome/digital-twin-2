@@ -72,11 +72,47 @@ if [ ! -f "../backend/lambda-deployment.zip" ]; then
     echo "dummy" | zip ../backend/lambda-deployment.zip -
 fi
 
-# Run terraform destroy with auto-approve
-if [ "$ENVIRONMENT" = "prod" ] && [ -f "prod.tfvars" ]; then
-    terraform destroy -var-file=prod.tfvars -var="project_name=$PROJECT_NAME" -var="environment=$ENVIRONMENT" -auto-approve
-else
-    terraform destroy -var="project_name=$PROJECT_NAME" -var="environment=$ENVIRONMENT" -auto-approve
+# Function to run terraform destroy with lock handling
+run_terraform_destroy() {
+    if [ "$ENVIRONMENT" = "prod" ] && [ -f "prod.tfvars" ]; then
+        terraform destroy -var-file=prod.tfvars -var="project_name=$PROJECT_NAME" -var="environment=$ENVIRONMENT" -auto-approve
+    else
+        terraform destroy -var="project_name=$PROJECT_NAME" -var="environment=$ENVIRONMENT" -auto-approve
+    fi
+}
+
+# Try to run destroy, handle lock errors
+set +e  # Temporarily disable exit on error to handle lock errors
+run_terraform_destroy 2>&1 | tee /tmp/terraform_output.log
+DESTROY_EXIT_CODE=${PIPESTATUS[0]}
+set -e  # Re-enable exit on error
+
+if [ $DESTROY_EXIT_CODE -ne 0 ]; then
+    # Check if the error was due to a state lock
+    if grep -q "Error acquiring the state lock" /tmp/terraform_output.log; then
+        echo "⚠️  State lock detected. Attempting to force unlock..."
+        # Extract lock ID from the error message (works with both GNU and BSD grep)
+        LOCK_ID=$(grep "ID:" /tmp/terraform_output.log | sed -n 's/.*ID:[[:space:]]*\([0-9a-f-]*\).*/\1/p' | head -1)
+        if [ -n "$LOCK_ID" ]; then
+            echo "🔓 Force unlocking state lock: $LOCK_ID"
+            terraform force-unlock -force "$LOCK_ID" || true
+            echo "🔄 Retrying terraform destroy..."
+            set +e
+            run_terraform_destroy
+            RETRY_EXIT_CODE=$?
+            set -e
+            if [ $RETRY_EXIT_CODE -ne 0 ]; then
+                echo "❌ Destroy failed after unlocking. Please check the error above."
+                exit 1
+            fi
+        else
+            echo "❌ Could not extract lock ID. Please unlock manually."
+            exit 1
+        fi
+    else
+        # Some other error occurred
+        exit 1
+    fi
 fi
 
 echo "✅ Infrastructure for ${ENVIRONMENT} has been destroyed!"
